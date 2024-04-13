@@ -1,0 +1,299 @@
+!pip install spark
+!pip install pyspark
+!pip install geopy
+!pip install scipy
+
+from google.colab import drive
+drive.mount('/content/drive')
+
+from pyspark.sql import SparkSession
+from pyspark.ml.feature import VectorAssembler
+from pyspark.sql.functions import col, lit
+from pyspark.sql.types import DoubleType
+from pyspark.sql.functions import udf
+from geopy.distance import geodesic
+
+# Initialize SparkSession
+spark = SparkSession.builder \
+    .appName("Ecological Health Classification") \
+    .getOrCreate()
+
+# Load datasets with different features
+df1 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biogeochemical Cycles/CD02_Stable_Isotope_Air_Forest.csv")
+df2 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biogeochemical Cycles/CD02_Stable_Isotope_Air_Pasture.csv")
+df3 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biogeochemical Cycles/CD02_Stable_Isotope_Air_Troposphere.csv")
+df4 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biogeochemical Cycles/CD02_Stable_Isotope_Water.csv")
+df5 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biogeochemical Cycles/MODIS_CCaN_ALL.csv")
+df6 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biogeochemical Cycles/TG07_km83_Tapajos_P_fertilization.csv") #drop
+df7 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biogeochemical Cycles/gppdi_npp_point.csv")
+df8 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biomass Dynamics/EMDI_ClassA_Cover_UMD_81.csv")
+df9 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biomass Dynamics/EMDI_ClassA_NPP_81_R2.csv")
+df10 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biomass Dynamics/EMDI_ClassA_PREC_PIK_81.csv")
+df11 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biomass Dynamics/EMDI_ClassA_SUN_PIK_81.csv")
+df12 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biomass Dynamics/EMDI_ClassA_Site_81.csv")
+df13 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biomass Dynamics/EMDI_ClassA_TMAX_PIK_81.csv")
+df14 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biomass Dynamics/EMDI_ClassA_Veg_81.csv")
+df15 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biomass Dynamics/EMDI_ClassB_Soil_IGBP_933.csv")
+df16 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biomass Dynamics/EMDI_ClassB_TMAX_933.csv")
+df17 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biomass Dynamics/EMDI_ClassB_TMIN_933.csv")
+df18 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biomass Dynamics/EMDI_ClassC_IGBP_soils.csv")
+df19 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biomass Dynamics/EMDI_ClassC_PREC_1901-95.csv")
+df20 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biomass Dynamics/EMDI_ClassC_TMIN_1930-95.csv")
+df21 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biomass Dynamics/EMDI_ClassC_TRANGE_1930-95.csv")
+df22 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biomass Dynamics/GPPDI_ClassA_Flags_162.csv")
+df23 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biomass Dynamics/GPPDI_ClassB_Flags_2363.csv")
+df24 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biomass Dynamics/GPPDI_ClassC_Flags_5164.csv")
+df25 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biomass Dynamics/GPPDI_ClassC_NPP_5164.csv")
+df26 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biomass Dynamics/NPP_Multibiome_EnvReview_Table_A1_R1.csv")
+df27 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biomass Dynamics/borfor1_npp_r1.csv")
+df28 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biomass Dynamics/borfor2_npp_r1.csv")
+df29 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Biomass Dynamics/npp_vastdata.csv")
+df30 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Decomposition/GPPDI_ClassB_Flags_2363.csv")
+df31 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Decomposition/GPPDI_ClassC_NPP_5164.csv")
+df32 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Decomposition/fluxnet_calculated_data.csv")
+df33 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Decomposition/srdb-data-V5.csv")
+df34 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/Bioshpere/Ecological Dynamics/Ecosystem Function/Nutrient Cycling/DeltaX_Belowground_Roots_Stable_Isotopes_Fall2021.csv")
+df35 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/atm/ABoVE_april-nov_2017_flask_data.csv")
+df36 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/atm/AQI and Lat Long of Countries.csv")
+df37 = spark.read.format("csv").option("header", "true").load(r"/content/drive/MyDrive/BDA/DATA/atm/ArN2_AirAge_Trace_Gases.csv")
+
+
+# Preprocess data
+df1 = df1.withColumnRenamed("Longitude", "longitude") \
+       .withColumnRenamed("Latitude", "latitude")
+df6 = df6.withColumnRenamed("Longitude", "longitude") \
+       .withColumnRenamed("Latitude", "latitude")
+df27 = df27.withColumnRenamed("Latitute", "latitude")
+
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col,lit
+
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, sqrt, pow
+
+# Initialize Spark session
+spark = SparkSession.builder \
+    .appName("Read CSV Parallel") \
+    .getOrCreate()
+
+# List of DataFrame names
+dfs = ['df1', 'df2', 'df3', 'df4', 'df5', 'df8', 'df9', 'df10', 'df11', 'df12', 'df13', 'df14', 'df15', 'df16', 'df17', 'df18', 'df19', 'df20', 'df21', 'df22', 'df23', 'df24', 'df25', 'df26', 'df28', 'df29', 'df30', 'df31', 'df32', 'df33', 'df34', 'df35', 'df36', 'df37']
+
+# List to store preprocessed DataFrames
+preprocessed_dfs = []
+
+# Loop through each DataFrame
+for df_name in dfs:
+    df = globals()[df_name]  # Access DataFrame by name
+
+    # Check if the DataFrame contains the 'latitude' column
+    if 'latitude' in df.columns:
+        # Preprocess the latitude column to ensure it falls within the range of -90 to 90 degrees
+        df = df.filter((col("latitude") >= -90) & (col("latitude") <= 90))
+
+        # Add the preprocessed DataFrame to the list
+        preprocessed_dfs.append(df)
+    else:
+        print("DataFrame {} does not contain a 'latitude' column.".format(df_name))
+
+def calculate_distance(lat1, lon1, lat2, lon2):
+    return sqrt(pow(lat2 - lat1, 2) + pow(lon2 - lon1, 2))
+# List to store dataframes
+loaded_dfs = []
+for df_name in dfs:
+    df = globals()[df_name]
+    loaded_dfs.append(df)
+# Function to filter dataframes based on physical distance
+def filter_dataframes(latitude, longitude, max_distance):
+    filtered_dfs = []
+    for df in loaded_dfs:
+        if 'latitude' in df.columns and 'longitude' in df.columns:
+            filtered_df = df.filter(
+                calculate_distance(col("latitude"), col("longitude"), latitude, longitude) <= max_distance
+            )
+            filtered_dfs.append(filtered_df)
+    return filtered_dfs
+
+
+# Input coordinates
+input_latitude = 40.7128
+input_longitude = -74.0060
+
+# Maximum distance threshold (adjust as needed)
+max_distance_threshold = 0.9  # You need to adjust this value based on your specific requirements
+
+# Retrieve features from dataframes based on input coordinates and distance threshold
+filtered_dfs = filter_dataframes(input_latitude, input_longitude, max_distance_threshold)
+
+# Print features from filtered dataframes
+for i, df in enumerate(filtered_dfs):
+    if df.count() > 0:
+        print("Features from DataFrame df{}:".format(i+1))
+        df.show()
+    else:
+        print("No data found in DataFrame df{} within the specified distance threshold.".format(i+1))
+
+# Now you have a list of preprocessed DataFrames stored in preprocessed_dfs
+
+
+# Loop through each preprocessed DataFrame and print only the headers
+for i, df in enumerate(preprocessed_dfs, start=1):
+    print("Headers of Preprocessed DataFrame {}:".format(i))
+    try:
+        print(df.columns)
+    except Exception as e:
+        print("An error occurred while displaying DataFrame {}: {}".format(i, e))
+
+from pyspark.sql.functions import col
+
+# Convert string columns to DoubleType
+preprocessed_dfs = df.withColumn("latitude", col("latitude").cast("double"))
+preprocessed_dfs = df.withColumn("longitude", col("longitude").cast("double"))
+
+
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.clustering import KMeans
+from pyspark.ml.evaluation import ClusteringEvaluator
+from pyspark.sql.types import DoubleType
+
+# Define clustering parameters
+k = 3  # Number of clusters
+seed = 123  # Random seed for reproducibility
+total_silhouette_score = 0
+total_dataframes = 0
+
+# Iterate over each DataFrame
+for i in range(1, 38):
+    # Select the current DataFrame
+    df = globals().get("df{}".format(i))
+
+    if df is None:
+        print("DataFrame df{} is missing. Skipping...".format(i))
+        continue
+
+    try:
+        # Ensure that latitude and longitude columns are of numerical data type
+        df = df.withColumn("latitude", df["latitude"].cast(DoubleType()))
+        df = df.withColumn("longitude", df["longitude"].cast(DoubleType()))
+
+        # Remove rows containing null values
+        df = df.dropna(subset=["latitude", "longitude"])
+
+        # Select latitude and longitude columns
+        lat_lon_df = df.select("latitude", "longitude")
+
+        # Assemble features into a single vector with handleInvalid="skip"
+        assembler = VectorAssembler(inputCols=["latitude", "longitude"], outputCol="features", handleInvalid="skip")
+        lat_lon_assembled = assembler.transform(lat_lon_df)
+
+        # Perform K-means clustering
+        kmeans = KMeans(featuresCol="features", k=k, seed=seed)
+        model = kmeans.fit(lat_lon_assembled)
+        clustered_df = model.transform(lat_lon_assembled)
+
+        # Evaluate clustering results using Silhouette score
+        evaluator = ClusteringEvaluator()
+        silhouette_score = evaluator.evaluate(clustered_df)
+        print("Silhouette score for df{}: {}".format(i, silhouette_score))
+
+        # Accumulate silhouette scores
+        total_silhouette_score += silhouette_score
+        total_dataframes += 1
+
+        # Show clustering results
+        clustered_df.select("latitude", "longitude", "prediction").show()
+
+    except Exception as e:
+        print("Error occurred in DataFrame df{}:".format(i))
+        print(str(e))
+        continue
+
+# Calculate average silhouette score
+if total_dataframes > 0:
+    average_silhouette_score = total_silhouette_score / total_dataframes
+    print("Overall average silhouette score: {}".format(average_silhouette_score))
+else:
+    print("No data frames were processed.")
+!pip install bokeh
+
+from bokeh.plotting import figure, show
+from bokeh.io import output_notebook
+from bokeh.models import Legend
+import seaborn as sns
+import matplotlib.colors as mcolors
+
+# Define seaborn color palettes
+Purples= sns.color_palette(palette='Purples', n_colors=10)
+PuOr = sns.color_palette(palette='Greys', n_colors=20)
+Reds = sns.color_palette(palette='Reds', n_colors=9)
+
+# Convert seaborn color palettes to hexadecimal color codes
+Purples_hex = [mcolors.to_hex(color) for color in Purples]
+PuOr_hex = [mcolors.to_hex(color) for color in PuOr]
+Reds_hex = [mcolors.to_hex(color) for color in Reds]
+
+# Output Bokeh plots directly in the notebook
+output_notebook()
+
+# Create a Bokeh figure
+p = figure(title="Ecosystem Analysis ", y_range=(-120.65, 100.85), x_range=(185, -250.85))
+p.xaxis.axis_label = 'Longitude'
+p.yaxis.axis_label = 'Latitude'
+
+# Define colors for different interest levels
+colors = {0: Purples_hex[8], 1: PuOr_hex[19], 2: Reds_hex[7]}  # Mapping of prediction values to colors
+legend_items = []
+
+# Iterate over each cluster prediction and plot it
+for cluster, color in colors.items():
+    # Select latitude and longitude for the current cluster
+    cluster_df = clustered_df.filter(clustered_df['prediction'] == cluster)
+    cluster_latitudes = cluster_df.select('latitude').rdd.flatMap(lambda x: x).collect()
+    cluster_longitudes = cluster_df.select('longitude').rdd.flatMap(lambda x: x).collect()
+
+    # Plot the cluster
+    circle = p.circle(cluster_longitudes, cluster_latitudes, size=7, color=color, fill_alpha=0.1, line_alpha=0.1)
+    legend_items.append((str(cluster), [circle]))
+
+# Add legend
+legend = Legend(items=legend_items, location="top_left")
+p.add_layout(legend, 'right')
+
+# Show the plot
+show(p)
+
+
+
+# Create a Bokeh figure
+p1 = figure(title="Cluster 0", y_range=(-120.65, 100.85), x_range=(0.05, -250.85))
+p1.xaxis.axis_label = 'Longitude'
+p1.yaxis.axis_label = 'Latitude'
+
+p2 = figure(title="Cluster 1", y_range=(-60,-35), x_range=(164, 178))
+p2.xaxis.axis_label = 'Longitude'
+p2.yaxis.axis_label = 'Latitude'
+
+p3 = figure(title="Cluster 2", y_range=(-120.65, 100.85), x_range=(0.05, -250.85))
+p3.xaxis.axis_label = 'Longitude'
+p3.yaxis.axis_label = 'Latitude'
+
+# Define colors for different interest levels
+colors = {0: Purples_hex[8], 1: PuOr_hex[19], 2: Reds_hex[7]}  # Mapping of prediction values to colors
+
+# Iterate over each cluster prediction and plot it
+for cluster, color in colors.items():
+    # Select latitude and longitude for the current cluster
+    cluster_df = clustered_df.filter(clustered_df['prediction'] == cluster)
+    cluster_latitudes = cluster_df.select('latitude').rdd.flatMap(lambda x: x).collect()
+    cluster_longitudes = cluster_df.select('longitude').rdd.flatMap(lambda x: x).collect()
+
+    # Plot the cluster in the corresponding figure
+    if cluster == 0:
+        p1.circle(cluster_longitudes, cluster_latitudes, size=7, color=color, fill_alpha=0.1, line_alpha=0.1)
+    elif cluster == 1:
+        p2.circle(cluster_longitudes, cluster_latitudes, size=10, color=color, fill_alpha=0.1, line_alpha=0.1)
+    elif cluster == 2:
+        p3.circle(cluster_longitudes, cluster_latitudes, size=7, color=color, fill_alpha=0.1, line_alpha=0.1)
+
+# Show the plots
+show(row(p1, p2, p3))
